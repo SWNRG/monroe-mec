@@ -1,18 +1,20 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# Author: Jonas Karlsson
-# Date: May 2016
+# Author: Dimitris Vardalis (based on the original script by Jonas Karlsson)
+# Date: January 2018
 # License: GNU General Public License v3
 # Developed for use by the EU H2020 MONROE project
 
 """
-Simple wrapper to run fping on a given host.
+This is an adaptation of the original ping script by Jonas Karlsson. The original
+script takes a single interface and runs the ping experiment on that interface.
+This script takes a list of interfaces and runs the experiments on all those
+interfaces. The idea is to measure RTT on all available interfaces and ultimately
+be able to select which interface to use for outgoing traffic.
 
-The script will run forever on the specified interface.
+The script will run forever on all specified interfaces.
 All default values are configurable from the scheduler.
-The output will be formated into a json object suitable for storage in the
-MONROE db.
 """
 import zmq
 import json
@@ -38,17 +40,17 @@ EXPCONFIG = {
         "zmqport": "tcp://172.17.0.1:5556",
         "nodeid": "fake.nodeid",
         "modem_metadata_topic": "MONROE.META.DEVICE.MODEM",
-        "server": "8.8.8.8",  # ping target
-        "interval": 1000,  # time in milliseconds between successive packets
+        "server": "195.251.209.199",  # default ping target (swn.uom.gr)
+        "interval": 5000,  # time in milliseconds between successive packets
         "dataversion": 2,
-        "dataid": "MONROE.EXP.PING",
+        "dataid": "MONROE.EXP.UOMPING",
         "meta_grace": 120,  # Grace period to wait for interface metadata
         "ifup_interval_check": 5,  # Interval to check if interface is up
         "export_interval": 5.0,
         "verbosity": 2,  # 0 = "Mute", 1=error, 2=Information, 3=verbose
         "resultdir": "/monroe/results/",
         "modeminterfacename": "InternalInterface",
-        "interfacename": "eth0",  # Interface to run the experiment on
+        "interfacenames": ["op0", "op1"]  # Interfaces to run the experiment on
         "interfaces_without_metadata": ["eth0",
                                         "wlan0"]  # Manual metadata on these IF
         }
@@ -162,7 +164,7 @@ def check_if(ifname):
 
 
 def check_meta(info, graceperiod, expconfig):
-    """Check if we have recieved required information within graceperiod."""
+    """Check if we have received required information within graceperiod."""
     return (expconfig["modeminterfacename"] in info and
             "Operator" in info and
             "Timestamp" in info and
@@ -206,7 +208,7 @@ if __name__ == '__main__':
             with open(CONFIGFILE) as configfd:
                 EXPCONFIG.update(json.load(configfd))
         except Exception as e:
-            print "Cannot retrive expconfig {}".format(e)
+            print "Cannot retrieve expconfig {}".format(e)
             raise e
     else:
         # We are in debug state always put out all information
@@ -214,7 +216,7 @@ if __name__ == '__main__':
 
     # Short hand variables and check so we have all variables we need
     try:
-        ifname = EXPCONFIG['interfacename']
+        ifnames = EXPCONFIG['interfacenames'] # List of interfaces to run the experiment on
         if_without_metadata = EXPCONFIG['interfaces_without_metadata']
         meta_grace = EXPCONFIG['meta_grace']
         ifup_interval_check = EXPCONFIG['ifup_interval_check']
@@ -232,47 +234,55 @@ if __name__ == '__main__':
 
     if EXPCONFIG['verbosity'] > 2:
         print EXPCONFIG
-    # Create a process for getting the metadata
-    # (could have used a thread as well but this is true multiprocessing)
-    meta_info, meta_process = create_meta_process(ifname, EXPCONFIG)
-    meta_process.start()
 
-    # Create a experiment script
-    exp_process = exp_process = create_exp_process(meta_info, EXPCONFIG)
+    interfacesMap = {}
+    
+    for ifname in ifnames:
+        # Create a map to hold information relevent to this interface
+        interfacesMap[ifname] = {}
+        # Create a process for getting the metadata
+        interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, EXPCONFIG)
+        interfacesMap[ifname]['meta_process'].start()
+
+        # Create a experiment script
+        interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname]['meta_info'], EXPCONFIG)
 
     # Control the processes
     while True:
-        # If meta dies recreate and start it (should not happen)
-        if not meta_process.is_alive():
-            # This is serious as we will not receive uptodate information
-            if exp_process.is_alive():  # Clean up the exp_thread
-                exp_process.terminate()
+        
+        for ifname in ifnames:
+            
+            # If meta dies recreate and start it (should not happen)
+            if not interfacesMap[ifname]['meta_process'].is_alive():
+                # This is serious as we will not receive uptodate information
+                if interfacesMap[ifname]['exp_process'].is_alive():  # Clean up the exp_thread
+                    interfacesMap[ifname]['exp_process'].terminate()
 
-            # The dict may have been corrupt so recreate that one
-            meta_info, meta_process = create_meta_process(ifname, EXPCONFIG)
-            meta_process.start()
+                # The dict may have been corrupt so recreate that one
+                interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, EXPCONFIG)
+                interfacesMap[ifname]['meta_process'].start()
 
-            exp_process = create_exp_process(meta_info, EXPCONFIG)
+                interfacesMap[ifname]['exp_process'] = create_exp_process(meta_info, EXPCONFIG)
 
-        # On these Interfaces we do net get modem information so we hack
-        # in the required values by hand whcih will immeditaly terminate
-        # metadata loop below
-        if (check_if(ifname) and ifname in if_without_metadata):
-            add_manual_metadata_information(meta_info, ifname, EXPCONFIG)
+            # On these Interfaces we do net get modem information so we hack
+            # in the required values by hand which will immediately terminate
+            # metadata loop below
+            if (check_if(ifname) and ifname in if_without_metadata):
+                add_manual_metadata_information(interfacesMap[ifname]['meta_info'], ifname, EXPCONFIG)
 
-        # Do we have the interfaces up ?
-        if (check_if(ifname) and check_meta(meta_info, meta_grace, EXPCONFIG)):
-            # We are all good
-            if EXPCONFIG['verbosity'] > 2:
-                print "Interface {} is up".format(ifname)
-            if exp_process.is_alive() is False:
-                exp_process.start()
-        elif exp_process.is_alive():
-            if EXPCONFIG['verbosity'] > 2:
-                print ("Interface {} is down and "
-                       "experiment are running").format(ifname)
-            # Interfaces down and we are running
-            exp_process.terminate()
-            exp_process = create_exp_process(meta_info, EXPCONFIG)
+            # Do we have the interfaces up ?
+            if (check_if(ifname) and check_meta(interfacesMap[ifname]['meta_info'], meta_grace, EXPCONFIG)):
+                # We are all good
+                if EXPCONFIG['verbosity'] > 2:
+                    print "Interface {} is up".format(ifname)
+                if interfacesMap[ifname]['exp_process'].is_alive() is False:
+                    interfacesMap[ifname]['exp_process'].start()
+            elif interfacesMap[ifname]['exp_process'].is_alive():
+                if EXPCONFIG['verbosity'] > 2:
+                    print ("Interface {} is down and "
+                           "experiment are running").format(ifname)
+                # Interfaces down and we are running
+                interfacesMap[ifname]['exp_process'].terminate()
+                interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname]['meta_info'], EXPCONFIG)
 
         time.sleep(ifup_interval_check)

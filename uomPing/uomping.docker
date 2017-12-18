@@ -4,4 +4,4 @@ MAINTAINER vardalis@gmail.com
 
 COPY files/* /opt/monroe/
 
-ENTRYPOINT ["dumb-init", "--", "/usr/bin/python", "/opt/monroe/uomfping_experiment.py"]
+ENTRYPOINT ["dumb-init", "--", "/usr/bin/python", "/opt/monroe/uomping_experiment.py"]

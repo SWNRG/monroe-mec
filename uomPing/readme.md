@@ -1,7 +1,12 @@
 
 # Experiment
+This is an adaptation of the original ping script by Jonas Karlsson. The original
+script takes a single interface and runs the ping experiment on that interface.
+This script takes a list of interfaces and runs the experiments on all those
+interfaces. The idea is to measure RTT on all available interfaces and ultimately
+be able to select which interface to use for outgoing traffic.
 The experiments measure IP RTT by continuously send ping
-packets to a configurable server (default 8.8.8.8, google public dns).
+packets to a configurable server (default 195.251.209.199 - swn.uom.gr).
 
 The experiment will send 1 Echo Request (ICMP type 8) packet per second to a
 server over all specified interfaces until aborted.
@@ -20,10 +25,10 @@ The default values are (can be overridden by a /monroe/config):
       "zmqport": "tcp://172.17.0.1:5556",
       "nodeid": "fake.nodeid",
       "modem_metadata_topic": "MONROE.META.DEVICE.MODEM",
-      "server": "8.8.8.8",  # ping target
-      "interval": 1000,  # time in milliseconds between successive packets
+      "server": "195.251.209.199",  # default ping target (swn.uom.gr)
+      "interval": 5000,  # time in milliseconds between successive packets
       "dataversion": 2,
-      "dataid": "MONROE.EXP.PING",
+      "dataid": "MONROE.EXP.UOMPING",
       "meta_grace": 120,  # Grace period to wait for interface metadata
       "ifup_interval_check": 5,  # Interval to check if interface is up
       "export_interval": 5.0,
@@ -48,7 +53,7 @@ running the container.
 
 ## The experiment will execute a statement similar to running fping like this
 ```bash
-fping -I op0 -D -p 1000 -l 8.8.8.8
+fping -I op0 -D -p 5000 -l 195.251.209.199
 ```
 
 ## Sample output
