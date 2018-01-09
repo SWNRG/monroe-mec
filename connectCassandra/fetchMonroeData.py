@@ -171,6 +171,7 @@ if __name__ == '__main__':
                 interfacesMap[iccid]["totalRtt"], interfacesMap[iccid]["numOfRttValues"] = 0, 0
                 
                 while not interfacesMap[iccid]["pingRowsFinished"] and interfacesMap[iccid]["pingRow"].timestamp <= runningTime:
+                    # print("interfacesMap[iccid][pingRowsFinished]: {}, interfacesMap[iccid][pingRow].timestamp: {:f}, runningTime: {:f}".format(interfacesMap[iccid]["pingRowsFinished"], interfacesMap[iccid]["pingRow"].timestamp, runningTime) )
                     try:
                         if interfacesMap[iccid]["pingRow"].rtt is not None:
                             interfacesMap[iccid]["totalRtt"] += interfacesMap[iccid]["pingRow"].rtt
@@ -179,7 +180,7 @@ if __name__ == '__main__':
                             if args.verbose:
                                 print ( "node: {} RTT, iccid: {}, time: {:f}, rtt: {:f}".format(str(interfacesMap[iccid]["pingRow"].nodeid), str(interfacesMap[iccid]["pingRow"].iccid), interfacesMap[iccid]["pingRow"].timestamp, interfacesMap[iccid]["pingRow"].rtt) )
                             
-                            interfacesMap[iccid]["pingRow"] = interfacesMap[iccid]["pingIterator"].next()
+                        interfacesMap[iccid]["pingRow"] = interfacesMap[iccid]["pingIterator"].next()
                     except Exception:
                         break
                 
@@ -193,7 +194,7 @@ if __name__ == '__main__':
                             if args.verbose:
                                 print ( "node: {} RSSI, iccid: {}, time: {:f}, rssi: {:f}".format(interfacesMap[iccid]["metaRow"].nodeid, interfacesMap[iccid]["metaRow"].iccid, interfacesMap[iccid]["metaRow"].timestamp, interfacesMap[iccid]["metaRow"].rssi))
                             
-                            interfacesMap[iccid]["metaRow"] = interfacesMap[iccid]["metaIterator"].next()
+                        interfacesMap[iccid]["metaRow"] = interfacesMap[iccid]["metaIterator"].next()
                     except Exception:
                         break
             
