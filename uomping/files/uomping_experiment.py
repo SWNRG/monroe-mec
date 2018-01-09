@@ -50,7 +50,7 @@ EXPCONFIG = {
         "verbosity": 2,  # 0 = "Mute", 1=error, 2=Information, 3=verbose
         "resultdir": "/monroe/results/",
         "modeminterfacename": "InternalInterface",
-        "interfacenames": ["op0", "op1"]  # Interfaces to run the experiment on
+        "interfacenames": ["op0", "op1"],  # Interfaces to run the experiment on
         "interfaces_without_metadata": ["eth0",
                                         "wlan0"]  # Manual metadata on these IF
         }
@@ -200,7 +200,7 @@ def create_exp_process(meta_info, expconfig):
 
 if __name__ == '__main__':
     """The main thread control the processes (experiment/metadata)."""
-
+    
     if not DEBUG:
         import monroe_exporter
         # Try to get the experiment config as provided by the scheduler
