@@ -100,7 +100,7 @@ if __name__ == '__main__':
             continue
 
         # Retrieve the GPS data and check if any rows are returned
-        gpsRows = session.execute("SELECT nodeid, timestamp, latitude, longitude FROM monroe_meta_device_gps WHERE nodeid = '" + str(resource['id']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " LIMIT 30 ALLOW FILTERING", timeout = 20000)
+        gpsRows = session.execute("SELECT nodeid, timestamp, latitude, longitude FROM monroe_meta_device_gps WHERE nodeid = '" + str(resource['id']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " ALLOW FILTERING", timeout = 20000)
         if not gpsRows:
             print("Node: {}, Type: {}, No GPS data.".format(str(resource['id']), str(resource['type'])))
             continue
@@ -127,7 +127,7 @@ if __name__ == '__main__':
             interfacesMap[iccid]["avgRtt"], interfacesMap[iccid]["avgRssi"] = 0, 0
             
             # Retrieve the RTT rows and grab the first row
-            interfacesMap[iccid]["pingRows"] = session.execute("SELECT nodeid, iccid, timestamp, rtt FROM monroe_exp_ping WHERE nodeid = '" + str(resource['id']) + "' AND iccid = '" + str(interface['iccid']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " LIMIT 30 ALLOW FILTERING", timeout = 20000)
+            interfacesMap[iccid]["pingRows"] = session.execute("SELECT nodeid, iccid, timestamp, rtt FROM monroe_exp_ping WHERE nodeid = '" + str(resource['id']) + "' AND iccid = '" + str(interface['iccid']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " ALLOW FILTERING", timeout = 20000)
             interfacesMap[iccid]["pingIterator"] = iter(interfacesMap[iccid]["pingRows"])
             try:
                 interfacesMap[iccid]["pingRow"] = interfacesMap[iccid]["pingIterator"].next()
@@ -135,7 +135,7 @@ if __name__ == '__main__':
                 interfacesMap[iccid]["pingRowsFinished"] = True
 
             # Retrieve the RSSI rows and grab the first row
-            interfacesMap[iccid]["metaRows"] = session.execute("SELECT nodeid, iccid, timestamp, rssi FROM monroe_meta_device_modem WHERE nodeid = '" + str(resource['id']) + "' AND iccid = '" + str(interface['iccid']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " LIMIT 30 ALLOW FILTERING", timeout = 20000)
+            interfacesMap[iccid]["metaRows"] = session.execute("SELECT nodeid, iccid, timestamp, rssi FROM monroe_meta_device_modem WHERE nodeid = '" + str(resource['id']) + "' AND iccid = '" + str(interface['iccid']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " ALLOW FILTERING", timeout = 20000)
             interfacesMap[iccid]["metaIterator"] = iter(interfacesMap[iccid]["metaRows"])                        
             try:
                 interfacesMap[iccid]["metaRow"] = interfacesMap[iccid]["metaIterator"].next()
