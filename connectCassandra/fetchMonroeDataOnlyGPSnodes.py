@@ -11,6 +11,7 @@ import sys
 from pyproj import Proj
 import requests
 import math
+import os
 
 ###############################################################################
 
@@ -69,6 +70,14 @@ def FindUtmZone(longitude, latitude):
 if __name__ == '__main__':
     args = ParseCommandLine()
 
+    #all nodes in this project
+    all_nodes=[]
+
+    #only nodes with GPS coordinates
+    nodes_with_GPS=[]
+
+
+
     # Make the request to the resources api
     
     #response = requests.get('https://scheduler.monroe-system.eu/v1/resources', cert=('/home/dimitris/monroe/certificate.pem', '/home/dimitris/monroe/privateKeyClear.pem'))
@@ -98,16 +107,38 @@ if __name__ == '__main__':
         # Skip nodes that do not belong to the selected product and nodes that are not in the deployed or testing state        
         if resource['project'] != args.project or (resource['type'] != 'deployed' and resource['type'] != 'testing'):
             continue
+            
+            
+        #all nodes in the experiment
+        if resource['id'] not in all_nodes:
+            all_nodes.append(resource['id'])
+            
+            
 
         # Retrieve the GPS data and check if any rows are returned
         gpsRows = session.execute("SELECT nodeid, timestamp, latitude, longitude FROM monroe_meta_device_gps WHERE nodeid = '" + str(resource['id']) + "' AND timestamp >= " + str(args.startTimeStamp) + " AND timestamp <= " + str(args.endTimeStamp) + " ALLOW FILTERING", timeout = 20000)
         if not gpsRows:
-            print("Node: {}, Type: {}, No GPS data.".format(str(resource['id']), str(resource['type'])))
+            #print("Node: {}, Type: {}, No GPS data.".format(str(resource['id']), str(resource['type'])))
+
+            # if node does not have gps data, it will go into all_nodes[]
+            all_nodes.append(resource['id'])
+
             continue
+
+
+
+
         else:
-            print("Node: {}, Type: {}, GPS data exists. Interfaces {}".format(str(resource['id']), str(resource['type']), str(len(resource['interfaces'])) ))
-        
-        # Create an iterator out of the returns rows and grab the first row        
+            #print("Node: {}, Type: {}, GPS data exists. Interfaces {}".format(str(resource['id']), str(resource['type']), str(len(resource['interfaces'])) ))
+
+
+            # only those nodes with GPS coordinates will go into this table
+            nodes_with_GPS.append(resource['id'])
+
+
+
+
+        # Create an iterator out of the returns rows and grab the first row
         gpsIterator = iter(gpsRows)
         gpsRowsFinished = False 
         try: # Grab initial row
@@ -147,6 +178,16 @@ if __name__ == '__main__':
         runningTime = initialTime
         
         x, y = 0, 0
+
+
+
+        # write results to a file
+        writeFileName=str(args.startTime)+"_"+str(args.endTime)+"_"+str(args.project)+"_intrvl_"+str(args.interval)+"_NODES_ONly"
+        print("file to write: ./"+str(writeFileName))
+        writeFile = open("./"+writeFileName,"w+")
+
+
+
         
         while runningTime <= args.endTimeStamp:
             # Advance through the gps values and find the last position prior to the running time
@@ -157,9 +198,15 @@ if __name__ == '__main__':
                     p = Proj(proj='utm', zone=utmZone, ellps='WGS84') # use kwargs
                     x,y = p(gpsRow.longitude, gpsRow.latitude)
                     
+
+
                     # Print the row for verification purposes
-                    if args.verbose:
-                        print ( "node: {} GPS, time: {:f}, zone: {}, x: {:f}, y: {:f} ".format(gpsRow.nodeid, gpsRow.timestamp, utmZone, x, y) )
+                    #if args.verbose:
+                    #    print ( "node: {} GPS, time: {:f}, zone: {}, x: {:f}, y: {:f} ".format(gpsRow.nodeid, gpsRow.timestamp, utmZone, x, y) )
+
+
+
+
                     gpsRow = gpsIterator.next()
                 except Exception:
                     gpsRowsFinished = True
@@ -176,10 +223,16 @@ if __name__ == '__main__':
                         if interfacesMap[iccid]["pingRow"].rtt is not None:
                             interfacesMap[iccid]["totalRtt"] += interfacesMap[iccid]["pingRow"].rtt
                             interfacesMap[iccid]["numOfRttValues"] += 1
+
+
+
+
                             # Print the row for verification purposes
-                            if args.verbose:
-                                print ( "node: {} RTT, iccid: {}, time: {:f}, rtt: {:f}".format(str(interfacesMap[iccid]["pingRow"].nodeid), str(interfacesMap[iccid]["pingRow"].iccid), interfacesMap[iccid]["pingRow"].timestamp, interfacesMap[iccid]["pingRow"].rtt) )
-                            
+                            #if args.verbose:
+                            #    print ( "node: {} RTT, iccid: {}, time: {:f}, rtt: {:f}".format(str(interfacesMap[iccid]["pingRow"].nodeid), str(interfacesMap[iccid]["pingRow"].iccid), interfacesMap[iccid]["pingRow"].timestamp, interfacesMap[iccid]["pingRow"].rtt) )
+
+
+
                         interfacesMap[iccid]["pingRow"] = interfacesMap[iccid]["pingIterator"].next()
                     except Exception:
                         break
@@ -190,17 +243,25 @@ if __name__ == '__main__':
                         if interfacesMap[iccid]["metaRow"].rssi is not None:
                             interfacesMap[iccid]["totalRssi"] += interfacesMap[iccid]["metaRow"].rssi
                             interfacesMap[iccid]["numOfRssiValues"] += 1
+
+
                             # Print the row for verification purposes
-                            if args.verbose:
-                                print ( "node: {} RSSI, iccid: {}, time: {:f}, rssi: {:f}".format(interfacesMap[iccid]["metaRow"].nodeid, interfacesMap[iccid]["metaRow"].iccid, interfacesMap[iccid]["metaRow"].timestamp, interfacesMap[iccid]["metaRow"].rssi))
-                            
+                            #if args.verbose:
+                            #    print ( "node: {} RSSI, iccid: {}, time: {:f}, rssi: {:f}".format(interfacesMap[iccid]["metaRow"].nodeid, interfacesMap[iccid]["metaRow"].iccid, interfacesMap[iccid]["metaRow"].timestamp, interfacesMap[iccid]["metaRow"].rssi))
+
+
+
                         interfacesMap[iccid]["metaRow"] = interfacesMap[iccid]["metaIterator"].next()
                     except Exception:
                         break
-            
+
+
+
             # Print the final results
-            print("node: {}, time: {:f}, x: {:f}, y: {:f} ".format(resource['id'], runningTime, x, y), end='')
-            
+            #print("node: {}, time: {:f}, x: {:f}, y: {:f} ".format(resource['id'], runningTime, x, y), end='')
+
+
+
             for interface in resource['interfaces']:
                 iccid = interface['iccid']
 
@@ -210,7 +271,7 @@ if __name__ == '__main__':
                 if interfacesMap[iccid]["numOfRssiValues"] > 0:
                     interfacesMap[iccid]["avgRssi"] = interfacesMap[iccid]["totalRssi"] / interfacesMap[iccid]["numOfRssiValues"]
                     
-                print(", {} rtt: {:f} ({:d} items), {} rssi: {:f} ({:d} items)".format(iccid, interfacesMap[iccid]["avgRtt"], interfacesMap[iccid]["numOfRttValues"], iccid, interfacesMap[iccid]["avgRssi"], interfacesMap[iccid]["numOfRssiValues"]), end='')
+                #print(", {} rtt: {:f} ({:d} items), {} rssi: {:f} ({:d} items)".format(iccid, interfacesMap[iccid]["avgRtt"], interfacesMap[iccid]["numOfRttValues"], iccid, interfacesMap[iccid]["avgRssi"], interfacesMap[iccid]["numOfRssiValues"]), end='')
             
             print()
             if args.verbose:
@@ -218,5 +279,28 @@ if __name__ == '__main__':
 
             runningTime += step
             #sys.exit()
+
+
+    print("Project:"+ str(args.project))
+
+    # all nodes
+    print("all_nodes:")
+    print(all_nodes)
+
+    # all nodes with GPS
+    print("\nNodes with GPS:")
+    print(nodes_with_GPS)
+
+    writeFile.write("Project: "+str( args.project))
+    writeFile.write("\nNodes with GPS: \n")
+    for node in nodes_with_GPS:
+        writeFile.write(str(node)+", ")
+
+    writeFile.write("\n----------------\n")
+
+    writeFile.write("All avaliable Nodes: \n")
+    for node in all_nodes:
+        writeFile.write(str(node)+", ")
+
 
     cluster.shutdown
