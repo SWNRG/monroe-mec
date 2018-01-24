@@ -26,8 +26,8 @@ import re
 import time
 import signal
 import monroe_exporter
+import io
 
-# Configuration
 # Configuration
 DEBUG = False
 CONFIGFILE = '/monroe/config'
@@ -47,18 +47,24 @@ EXPCONFIG = {
         "meta_grace": 120,  # Grace period to wait for interface metadata
         "ifup_interval_check": 5,  # Interval to check if interface is up
         "export_interval": 5.0,
-        "verbosity": 2,  # 0 = "Mute", 1=error, 2=Information, 3=verbose
+        "verbosity": 3,  # 0 = "Mute", 1=error, 2=Information, 3=verbose
         "resultdir": "/monroe/results/",
+        "resultfile": "/monroe/results/results.txt",
         "modeminterfacename": "InternalInterface",
         "interfacenames": ["op0", "op1"],  # Interfaces to run the experiment on
         "interfaces_without_metadata": ["eth0",
                                         "wlan0"]  # Manual metadata on these IF
         }
 
+WINDOW_SIZE = 10
 
-def run_exp(meta_info, expconfig):
-
+def run_exp(my_interface_map, expconfig):
     global FPING_PROCESS
+
+    meta_info = my_interface_map['meta_info']
+    rssis = my_interface_map['rssis']
+    rtts = my_interface_map['rtts']
+    
     # Set some variables for saving data every export_interval
     monroe_exporter.initalize(expconfig['export_interval'],
                               expconfig['resultdir'])
@@ -88,10 +94,14 @@ def run_exp(meta_info, expconfig):
             # keys are defined in regexp compilation. Nice!
             exp_result = m.groupdict()
 
+            add_value(rtts, float(exp_result['rtt']))
+            add_value(rssis, meta_info["RSSI"])
+            
             msg = {
                             'Bytes': int(exp_result['bytes']),
                             'Host': exp_result['host'],
                             'Rtt': float(exp_result['rtt']),
+                            'AvgRtt': calc_avg(rtts),
                             'SequenceNumber': int(seq),
                             'Timestamp': float(exp_result['ts']),
                             "Guid": expconfig['guid'],
@@ -99,8 +109,11 @@ def run_exp(meta_info, expconfig):
                             "DataVersion": expconfig['dataversion'],
                             "NodeId": expconfig['nodeid'],
                             "Iccid": meta_info["ICCID"],
-                            "Operator": meta_info["Operator"]
+                            "Operator": meta_info["Operator"],
+                            "Rssi": meta_info["RSSI"],
+                            "AvgRssi": calc_avg(rssis),
                   }
+
         else:  # We lost the interface or did not get a reply
             msg = {
                             'Host': server,
@@ -119,6 +132,9 @@ def run_exp(meta_info, expconfig):
         if not DEBUG:
             # We have already initalized the exporter with the export dir
             monroe_exporter.save_output(msg)
+            with io.open(expconfig['resultfile'], 'a') as f:
+                f.write(unicode(json.dumps(msg) + '\n'))
+
         seq += 1
         time.sleep(interval)
     # Cleanup
@@ -191,12 +207,105 @@ def create_meta_process(ifname, expconfig):
     return (meta_info, process)
 
 
-def create_exp_process(meta_info, expconfig):
+def create_exp_process(my_interface_map, expconfig):
     """This create a experiment thread."""
-    process = Process(target=run_exp, args=(meta_info, expconfig, ))
+    process = Process(target=run_exp, args=(my_interface_map, expconfig, ))
     process.daemon = True
     return process
 
+def any_meta_dead(expconfig, interfacesMap):
+    """Is any meta process not running?"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+
+    for ifname in ifnames:
+        if not interfacesMap[ifname]['meta_process'].is_alive():
+            return True
+    return False
+
+def start_dead_meta(expconfig, interfacesMap):
+    """Start meta processes that are not running"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+
+    for ifname in ifnames:
+        if not interfacesMap[ifname]['meta_process'].is_alive():
+            interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, expconfig)
+            interfacesMap[ifname]['meta_process'].start()
+            if interfacesMap[ifname]['exp_process'].is_alive():  # Clean up the exp_thread
+                interfacesMap[ifname]['exp_process'].terminate()
+
+def add_ifs_metadata(expconfig, interfacesMap):
+    """Add metadata to all applicable interfaces"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+    if_without_metadata = expconfig['interfaces_without_metadata']
+    for ifname in ifnames:
+        # On these Interfaces we do net get modem information so we hack
+        # in the required values by hand which will immediately terminate
+        # metadata loop below
+        if (check_if(ifname) and ifname in if_without_metadata):
+            add_manual_metadata_information(interfacesMap[ifname]['meta_info'], ifname, expconfig)
+
+def all_ifs_are_up(expconfig, interfacesMap):
+    """Check if all interfaces are up"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+    for ifname in ifnames:
+        # Do we have the interfaces up ?
+        if not (check_if(ifname) and check_meta(interfacesMap[ifname]['meta_info'], meta_grace, expconfig)):    
+            return False
+    return True
+
+def all_exp_completed(expconfig, interfacesMap):
+    """Check if all exp processes have completed"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+
+    for ifname in ifnames:
+        if interfacesMap[ifname]['exp_process'].is_alive():
+            return False
+    return True
+    
+def start_all_exp(expconfig, interfacesMap):
+    """Start all exp processes. If any is still running kill it first"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+    
+    for ifname in ifnames:
+        # Do we have the interfaces up ?
+        if (check_if(ifname) and check_meta(interfacesMap[ifname]['meta_info'], meta_grace, expconfig)):
+            # We are all good
+            if expconfig['verbosity'] > 2:
+                print "Interface {} is up".format(ifname)
+            if interfacesMap[ifname]['exp_process'].is_alive():
+                interfacesMap[ifname]['exp_process'].terminate()
+            interfacesMap[ifname]['exp_process'].start()
+
+def recreate_all_exp(expconfig, interfacesMap):
+    """Recreate all experiment processes"""
+    ifnames = expconfig['interfacenames'] # List of interfaces to check
+    if_without_metadata = expconfig['interfaces_without_metadata']
+    
+    meta_grace = expconfig['meta_grace']
+    for ifname in ifnames:
+        if interfacesMap[ifname]['exp_process'].is_alive():
+            if expconfig['verbosity'] > 2:
+                print ("Interface {} is down and "
+                       "experiment are running").format(ifname)
+            # Interfaces down and we are running
+            interfacesMap[ifname]['exp_process'].terminate()
+        interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname], expconfig)
+
+def add_value(window, value):
+    """Add new value to a window"""
+    if len(window) < WINDOW_SIZE:
+        window.insert(0, value)
+    else:
+        window.pop()
+        window.insert(0, value)
+
+def calc_avg(window):
+    """Calculate average for the given window"""
+    runningSum = 0.0
+    for x in window:
+        runningSum += x
+    
+    return runningSum / len(window)
 
 if __name__ == '__main__':
     """The main thread control the processes (experiment/metadata)."""
@@ -238,18 +347,43 @@ if __name__ == '__main__':
     interfacesMap = {}
     
     for ifname in ifnames:
-        # Create a map to hold information relevent to this interface
+        # Create a map to hold information relevant to this interface
         interfacesMap[ifname] = {}
         # Create a process for getting the metadata
         interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, EXPCONFIG)
         interfacesMap[ifname]['meta_process'].start()
 
-        # Create a experiment script
-        interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname]['meta_info'], EXPCONFIG)
+        # Create an experiment script
+        interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname], EXPCONFIG)
+        
+        # Initialize value windows
+        interfacesMap[ifname]['rtts'] = []
+        interfacesMap[ifname]['rssis'] = []
 
     # Control the processes
     while True:
+        # If any of the meta is dead restart it and terminate all possible processes that may be still running
+        if any_meta_dead(EXPCONFIG, interfacesMap):
+            for ifname in ifnames:
+                if not interfacesMap[ifname]['meta_process'].is_alive():
+                    interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, expconfig)
+                    interfacesMap[ifname]['meta_process'].start()
+                if interfacesMap[ifname]['exp_process'].is_alive():  # Clean up the exp_thread
+                    interfacesMap[ifname]['exp_process'].terminate()
+                
+                interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname], EXPCONFIG)
+
+        add_ifs_metadata(EXPCONFIG, interfacesMap)
+
+        if all_ifs_are_up(EXPCONFIG, interfacesMap):
+            if all_exp_completed(EXPCONFIG, interfacesMap):
+                start_all_exp(EXPCONFIG, interfacesMap)
+        else:
+            recreate_all_exp(EXPCONFIG, interfacesMap)
         
+        time.sleep(ifup_interval_check)
+
+"""
         for ifname in ifnames:
             
             # If meta dies recreate and start it (should not happen)
@@ -262,7 +396,7 @@ if __name__ == '__main__':
                 interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, EXPCONFIG)
                 interfacesMap[ifname]['meta_process'].start()
 
-                interfacesMap[ifname]['exp_process'] = create_exp_process(meta_info, EXPCONFIG)
+                interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname]['meta_info'], EXPCONFIG)
 
             # On these Interfaces we do net get modem information so we hack
             # in the required values by hand which will immediately terminate
@@ -284,5 +418,4 @@ if __name__ == '__main__':
                 # Interfaces down and we are running
                 interfacesMap[ifname]['exp_process'].terminate()
                 interfacesMap[ifname]['exp_process'] = create_exp_process(interfacesMap[ifname]['meta_info'], EXPCONFIG)
-
-        time.sleep(ifup_interval_check)
+"""        

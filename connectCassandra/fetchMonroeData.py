@@ -143,7 +143,7 @@ if __name__ == '__main__':
                 interfacesMap[iccid]["metaRowsFinished"] = True
         
         # Initialize the running time to the initial time. At the end of each iteration of the while loop below the 
-        # running time will be advances by 5
+        # running time will be advanced by the user-defined step (default = 5)
         runningTime = initialTime
         
         x, y = 0, 0
