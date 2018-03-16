@@ -1,0 +1,9 @@
+{
+    "Actions":
+    [
+        { "Time": 50, "Repetitions": 2, "Url": "http://www.google.com/" },
+        { "Time": 55, "Repetitions": 1, "Url": "http://www.uom.gr/" },
+        { "Time": 60, "Repetitions": 4, "Url": "http://www.bbc.com/" },
+        { "Time": 65, "Repetitions": 3, "Url": "http://www.dictionary.com/" }
+    ]
+}
