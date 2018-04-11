@@ -1,9 +1,24 @@
 {
     "Actions":
     [
-        { "Time": 50, "Repetitions": 2, "Url": "http://www.google.com/" },
-        { "Time": 55, "Repetitions": 1, "Url": "http://www.uom.gr/" },
-        { "Time": 60, "Repetitions": 4, "Url": "http://www.bbc.com/" },
-        { "Time": 65, "Repetitions": 3, "Url": "http://www.dictionary.com/" }
+        { "Time": 20, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 30, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 40, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 50, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 60, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 70, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 80, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 90, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 100, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 110, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 120, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 130, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 140, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 150, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 160, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 170, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 180, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 190, "Repetitions": 5, "Url": "http://www.bbc.com/" },
+        { "Time": 200, "Repetitions": 5, "Url": "http://www.bbc.com/" }
     ]
 }

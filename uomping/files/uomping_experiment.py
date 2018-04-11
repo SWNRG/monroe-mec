@@ -51,7 +51,7 @@ EXPCONFIG = {
         "meta_grace": 120,  # Grace period to wait for interface metadata
         "ifup_interval_check": 5,  # Interval to check if interface is up
         "export_interval": 5.0,
-        "verbosity": 3,  # 0 = "Mute", 1=error, 2=Information, 3=verbose
+        "verbosity": 0,  # 0 = "Mute", 1=error, 2=Information, 3=verbose
         "resultdir": "/monroe/results/",
         "resultfile": "/monroe/results/results.txt",
         "modeminterfacename": "InternalInterface",
@@ -60,6 +60,7 @@ EXPCONFIG = {
         "downloadUrl": "195.251.209.199",  # same as default ping target (swn.uom.gr)
         "size": 3*1024,  # The maximum size in Kbytes to download
         "time": 3600,  # The maximum time in seconds for a download
+        "doLoadBalancing" : True
         }
 
 # Sample curl experiment config file. Will be overwritten by the configuration file.
@@ -137,11 +138,11 @@ def run_ping_exp(my_interface_map, expconfig, log_list):
                             'SequenceNumber': int(seq),
                             'Timestamp': float(exp_result['ts']),
                             "Guid": expconfig['guid'],
-                            "DataId": expconfig['dataid'] + '.' + ifname,
+                            "DataId": expconfig['dataid'],
+                            "Interface": ifname,                            
                             "DataVersion": expconfig['dataversion'],
                             "NodeId": expconfig['nodeid'],
                             "Iccid": meta_info["ICCID"],
-                            "Interface": ifname,
                             "Operator": meta_info["Operator"],
                             "Rssi": meta_info["RSSI"],
                             "AvgRssi": calc_avg(rssis),
@@ -153,7 +154,8 @@ def run_ping_exp(my_interface_map, expconfig, log_list):
                             'SequenceNumber': int(seq),
                             'Timestamp': time.time(),
                             "Guid": expconfig['guid'],
-                            "DataId": expconfig['dataid'] + '.' + ifname,
+                            "DataId": expconfig['dataid'],
+                            "Interface": ifname,
                             "DataVersion": expconfig['dataversion'],
                             "NodeId": expconfig['nodeid'],
                             "Iccid": meta_info["ICCID"],
@@ -186,7 +188,7 @@ def run_curl_exp(interfacesMap, expconfig, curl_config, log_list):
     local_actions = curl_config['Actions']
     
     # Find next action. If no action is found action will be None
-    action = find_next_action(local_actions)
+    action = find_next_action(local_actions, expconfig)
 
     while action is not None:
         selectedInterface = None
@@ -205,79 +207,20 @@ def run_curl_exp(interfacesMap, expconfig, curl_config, log_list):
                     selectedInterface = interface
                     minRtt = calc_avg(interfacesMap[interface]['rtts'])
 
-        if selectedInterface is None:
-            print "No RTT data. Curl action aborted"
-            return
+            if selectedInterface is None and expconfig['verbosity'] > 1:
+                print "No RTT data. Curl action aborted"
+                return
 
-        print "Selected interface is " + selectedInterface
-        
-        meta_info = interfacesMap[selectedInterface]['meta_info']
-        rssis = interfacesMap[selectedInterface]['rssis']
-        rtts = interfacesMap[selectedInterface]['rtts']
-        
-        ifname = meta_info[expconfig["modeminterfacename"]]
-        interval = float(expconfig['interval']/1000.0)
-        downloadUrl = expconfig['downloadUrl']
-        
-        cmd = ["curl",
-               "-o", "/dev/null",  # to not output filecontents on stdout
-               "--fail",  # to get the curl exit code 22 for http failures
-               "--insecure",  # to allow selfsigned certificates
-               "--raw",
-               "--silent",
-               "--write-out", "{}".format(CURL_METRICS),
-               "--interface", "{}".format(ifname),
-               "--max-time", "{}".format(expconfig['time']),
-               # "--range", "0-{}".format(expconfig['size'] - 1),
-               "{}".format(action['Url'])]
+        if expconfig['verbosity'] > 1:
+            print "Selected interface is " + selectedInterface
        
-        # Safeguard to always have a defined output variable
-        output = None
+        executeAction(action, selectedInterface, expconfig, log_list, True)
         
-        # Iterate over the number of repetitions for the current action
-        for i in range(0, action['Repetitions']):
-            err_code = 0
-            try:
-                start_curl = time.time()
-                try:
-                    output = check_output(cmd)
-                except CalledProcessError as e:
-                        err_code = e.returncode # AEL get the error code here
-                        output = e.output
-                        # if e.returncode == 28:  # time-limit exceeded
-                        #     if expconfig['verbosity'] > 2:
-                        #         print ("Exceding timelimit {}, "
-                        #                "saving what we have").format(expconfig['time'])
-                        #     output = e.output
-                        # else:
-                        #     raise e
-                # Clean away leading and trailing whitespace
-                output = output.strip(' \t\r\n\0')
-                # Convert to JSON
-                msg = json.loads(output)
-                msg.update({
-                    "ErrorCode": err_code,
-                    "Guid": expconfig['guid'],
-                    "DataId": expconfig['dataidCurl'],
-                    "DataVersion": expconfig['dataversion'],
-                    "NodeId": expconfig['nodeid'],
-                    "Timestamp": start_curl,
-                    "Iccid": meta_info["ICCID"],
-                    "Operator": meta_info["Operator"],
-                    "DownloadTime": msg["TotalTime"] - msg["SetupTime"],
-                    "SequenceNumber": i
-                })
-                if expconfig['verbosity'] > 2:
-                    print msg
-                if not DEBUG:
-                    monroe_exporter.save_output(msg, expconfig['resultdir'])
-                    log_list.append(unicode(json.dumps(msg) + '\n'))
-            except Exception as e:
-                if expconfig['verbosity'] > 0:
-                    print ("Execution or parsing failed for "
-                           "command : {}, "
-                           "output : {}, "
-                           "error: {}").format(cmd, output, e)
+        for interface, value in interfacesMap.iteritems():
+            selectedInterface = interface
+            break;
+        
+        executeAction(action, selectedInterface, expconfig, log_list, False)
         
         # Mark action as executed
         action['IsExecuted'] = True
@@ -287,7 +230,82 @@ def run_curl_exp(interfacesMap, expconfig, curl_config, log_list):
         local_actions = curl_config['Actions']
         
         # Get the next action
-        action = find_next_action(local_actions)
+        action = find_next_action(local_actions, expconfig)
+
+def executeAction(action, selectedInterface, expconfig, log_list, dynamicSelection):
+    meta_info = interfacesMap[selectedInterface]['meta_info']
+    rssis = interfacesMap[selectedInterface]['rssis']
+    rtts = interfacesMap[selectedInterface]['rtts']
+
+    ifname = meta_info[expconfig["modeminterfacename"]]
+    interval = float(expconfig['interval']/1000.0)
+    downloadUrl = expconfig['downloadUrl']
+
+    cmd = ["curl",
+           "-o", "/dev/null",  # to not output filecontents on stdout
+           "--fail",  # to get the curl exit code 22 for http failures
+           "--insecure",  # to allow selfsigned certificates
+           "--raw",
+           "--silent",
+           "--write-out", "{}".format(CURL_METRICS),
+           "--interface", "{}".format(ifname),
+           "--max-time", "{}".format(expconfig['time']),
+           # "--range", "0-{}".format(expconfig['size'] - 1),
+           "{}".format(action['Url'])]
+
+    # Safeguard to always have a defined output variable
+    output = None
+    
+    # Iterate over the number of repetitions for the current action
+    for i in range(0, action['Repetitions']):
+        err_code = 0
+        try:
+            start_curl = time.time()
+            try:
+                output = check_output(cmd)
+            except CalledProcessError as e:
+                    err_code = e.returncode # AEL get the error code here
+                    output = e.output
+                    # if e.returncode == 28:  # time-limit exceeded
+                    #     if expconfig['verbosity'] > 2:
+                    #         print ("Exceding timelimit {}, "
+                    #                "saving what we have").format(expconfig['time'])
+                    #     output = e.output
+                    # else:
+                    #     raise e
+            # Clean away leading and trailing whitespace
+            output = output.strip(' \t\r\n\0')
+            # Convert to JSON
+            msg = json.loads(output)
+            msg.update({
+                "ErrorCode": err_code,
+                "Guid": expconfig['guid'],
+                "DataId": expconfig['dataidCurl'],
+                "DataVersion": expconfig['dataversion'],
+                "NodeId": expconfig['nodeid'],
+                "Timestamp": start_curl,
+                "Iccid": meta_info["ICCID"],
+                "Operator": meta_info["Operator"],
+                "DownloadTime": msg["TotalTime"] - msg["SetupTime"],
+                "SequenceNumber": i
+            })
+            
+            if dynamicSelection:
+                msg.update({ "DynamicSelection": True })
+            else:
+                msg.update({ "DynamicSelection": False })
+            
+            if expconfig['verbosity'] > 2:
+                print msg
+            if not DEBUG:
+                monroe_exporter.save_output(msg, expconfig['resultdir'])
+                log_list.append(unicode(json.dumps(msg) + '\n'))
+        except Exception as e:
+            if expconfig['verbosity'] > 0:
+                print ("Execution or parsing failed for "
+                       "command : {}, "
+                       "output : {}, "
+                       "error: {}").format(cmd, output, e)
 
 def metadata(meta_ifinfo, ifname, expconfig):
     """Seperate process that attach to the ZeroMQ socket as a subscriber.
@@ -458,15 +476,16 @@ def calc_avg(window):
         return runningSum / len(window)
     return -1
 
-def find_next_action(curl_actions):
+def find_next_action(curl_actions, expconfig):
     currentTime = datetime.datetime.now()
     
-    for action in curl_actions:
-        print action['Time']
-        print action['Repetitions']
-        print action['Url']
-        print action['IsExecuted']
-        print '------------------'
+    if expconfig['verbosity'] > 1:
+        for action in curl_actions:
+            print action['Time']
+            print action['Repetitions']
+            print action['Url']
+            print action['IsExecuted']
+            print '------------------'
     
     # Find the first action with a Time less than or equal to the current time
     for action in curl_actions:
@@ -508,7 +527,9 @@ if __name__ == '__main__':
             print "Cannot retrieve expconfig {}".format(e)
             raise e
         
-        print "Falsifying..."
+        if EXPCONFIG['verbosity'] > 1:
+            print "Falsifying..."
+
         for action in CURL_EXPCONFIG['Actions']:
             action['IsExecuted'] = False
 
@@ -564,7 +585,8 @@ if __name__ == '__main__':
     while True:
         # If any of the meta is dead restart it and terminate all possible processes that may be still running
         if any_meta_dead(EXPCONFIG, interfacesMap):
-            print "Any meta dead"
+            if EXPCONFIG['verbosity'] > 2:
+                print "Any meta dead"
             for ifname in ifnames:
                 if not interfacesMap[ifname]['meta_process'].is_alive():
                     interfacesMap[ifname]['meta_info'], interfacesMap[ifname]['meta_process'] = create_meta_process(ifname, expconfig)
@@ -581,10 +603,12 @@ if __name__ == '__main__':
 
         if all_ifs_are_up(EXPCONFIG, interfacesMap):
             if all_exp_completed(EXPCONFIG, interfacesMap):
-                print "Starting all exp"
+                if EXPCONFIG['verbosity'] > 2:
+                    print "Starting all exp"
                 start_all_exp(EXPCONFIG, interfacesMap)
         else:
-            print "Recreating all exp"
+            if EXPCONFIG['verbosity'] > 2:
+                print "Recreating all exp"
             recreate_all_exp(EXPCONFIG, interfacesMap, log_list)
 
         if not curl_exp_process.is_alive():
@@ -604,4 +628,4 @@ if __name__ == '__main__':
     # Output log list entries to file
     with io.open(EXPCONFIG['resultfile'], 'w') as f:
         for log in log_list:
-            f.write(log)    
+            f.write(log)
