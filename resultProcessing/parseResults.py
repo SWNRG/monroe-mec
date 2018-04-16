@@ -50,7 +50,15 @@ if __name__ == '__main__':
                     outputFile.write( unicode(str(jsonLine["Timestamp"]) + ", " + jsonLine["Url"] + ", " + str(jsonLine["Speed"]) + ", " + jsonLine["Operator"] + ", " + str(jsonLine["DynamicSelection"]) + "\n" ) )
                     speedSumStatic += jsonLine["Speed"]
                     lineNumStatic += 1
+                    
+        inputFile.seek(0)
 
+        outputFile.write(unicode("\n\n\nTimestamp, Operator, AvgRtt"))
+        for line in inputFile:
+            found = False
+            jsonLine = json.loads(line)
+            if jsonLine["DataId"] == "MONROE.EXP.UOMPING.PING" and "AvgRtt" in jsonLine:
+                outputFile.write( unicode(str(jsonLine["Timestamp"]) + ", " + jsonLine["Operator"] + ", " + str(jsonLine["AvgRtt"]) + "\n") )
                     
     if lineNumDynamic > 0 :
         print "Average speed dynamic = " + str(speedSumDynamic / lineNumDynamic) + " bytes/sec"
