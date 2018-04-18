@@ -57,7 +57,6 @@ EXPCONFIG = {
         "modeminterfacename": "InternalInterface",
         "interfacenames": ["op0", "op1"],  # Interfaces to run the experiment on
         "interfaces_without_metadata": ["eth0", "wlan0"],  # Manual metadata on these IF
-        "downloadUrl": "195.251.209.199",  # same as default ping target (swn.uom.gr)
         "size": 3*1024,  # The maximum size in Kbytes to download
         "time": 3600  # The maximum time in seconds for a download
         }
@@ -238,7 +237,6 @@ def executeAction(action, selectedInterface, expconfig, log_list, dynamicSelecti
 
     ifname = meta_info[expconfig["modeminterfacename"]]
     interval = float(expconfig['interval']/1000.0)
-    downloadUrl = expconfig['downloadUrl']
 
     cmd = ["curl",
            "-o", "/dev/null",  # to not output filecontents on stdout
