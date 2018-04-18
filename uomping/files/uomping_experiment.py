@@ -59,8 +59,7 @@ EXPCONFIG = {
         "interfaces_without_metadata": ["eth0", "wlan0"],  # Manual metadata on these IF
         "downloadUrl": "195.251.209.199",  # same as default ping target (swn.uom.gr)
         "size": 3*1024,  # The maximum size in Kbytes to download
-        "time": 3600,  # The maximum time in seconds for a download
-        "doLoadBalancing" : True
+        "time": 3600  # The maximum time in seconds for a download
         }
 
 # Sample curl experiment config file. Will be overwritten by the configuration file.
