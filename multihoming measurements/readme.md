@@ -161,6 +161,8 @@ The BBC website was downloaded five times every 10 seconds starting at time 20 s
 The chart below displays the download speeds for the dynamic and static interface selection scenarios as well as the recent average RTTs for the two mobile operators of the node (“3” and “Telia”). The x axis represents seconds since the beginning of the experiment. The static interface selection always downloads the web pages using operator “3”. The dynamic download starts with using “Telia” which in the beginning has a lower RTT measurement. At around time 5 seconds the dynamic selection switches to operator “3” as the “Telia” RTT becomes very high. Finally, the dynamic selection switches to “Telia” at approximately time 36 seconds and remains with “Telia” for the rest of the experiment. It is can be observed that the dynamic selection results in higher download speed for most downloads.
 
 ![download speed for dynamic and static interface selection](https://user-images.githubusercontent.com/16095622/41564046-4dbec33c-735a-11e8-9802-9bed7b8bc6ef.png)
-###Download speed for dynamic and static interface selection and RTT for "3” and “Telia” mobile operators
+
+Download speed for dynamic and static interface selection and RTT for "3” and “Telia” mobile operators
+
 Please note that the above results are by no means complete. Further experimentation is necessary in order to produce significant results. Besides, the interface selection at the moment is rudimentary and so it does not exhibit considerable scientific interest. However, by developing this script we have set the basis for conducting various much more interesting experiments in the future.
 
